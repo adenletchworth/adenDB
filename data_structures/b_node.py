@@ -115,4 +115,71 @@ class BNode:
     def get_data_end(self) -> int:
         """Returns the total number of meaningful bytes in the node's data."""
         return self.get_kv_start(self.get_num_keys())  # Last offset is sentinel
+    
+    def node_lookup(self, key: bytes) -> int:
+        """Performs a bisect-left style lookup for the insertion point of a given key."""
+        n_keys = self.get_num_keys()
+
+        if n_keys == 0:
+            return 0  
+
+        pos = 0  
+        for i in range(1, n_keys):  
+            if self.get_key(i) > key:
+                break
+            pos = i
+
+        return pos
+    
+    def leaf_insert(self, old_node, idx: int, key: bytes, val: bytes) -> 'BNode':
+        """Inserts a new key-value pair into a leaf node, returning a new BNode instance."""
+
+        new_node = BNode()
+        new_node.write_metadata(NodeType.LEAF.value, old_node.get_num_keys() + 1)
+
+        new_node.append_range(new_node, old_node, 0, 0, idx)
+
+        new_node.append_kv(idx, key, val)
+
+        new_node.append_range(new_node, old_node, idx + 1, idx, old_node.get_num_keys() - idx)
+
+        return new_node
+
+    def append_range(self, new_node, start_new, start_old, num_pairs):
+        assert start_old + num_pairs <= self.get_num_keys()
+        assert start_new + num_pairs <= new_node.get_num_keys()
+
+        if num_pairs == 0:
+            return
+        
+        # Copy pointers
+        for i in range(num_pairs):
+            new_node.set_pointer(start_new + i, self.get_pointer(start_old + i))
+
+        # Copy offsets
+        start_offset_new = new_node.get_offset(start_new)
+        start_offset_old = self.get_offset(start_old)
+
+        for i in range(1, num_pairs + 1):  
+            offset = start_offset_new + self.get_offset(start_old + i) - start_offset_old
+            new_node.set_offset(start_new + i, offset)
+
+        # Copy KV data
+        start_kv_old = self.get_kv_start(start_old)
+        end_kv_old = self.get_kv_start(start_old + num_pairs)
+
+        start_kv_new = new_node.get_kv_start(start_new)
+        
+        new_node.data[start_kv_new : start_kv_new + (end_kv_old - start_kv_old)] = \
+            self.data[start_kv_old : end_kv_old]
+        
+    
+
+
+
+
+
+
+        
+
 
